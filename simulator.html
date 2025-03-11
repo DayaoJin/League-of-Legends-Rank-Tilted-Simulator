@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ranked Tilt Simulator</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            background-color: #1e1e1e;
+            color: white;
+            padding: 20px;
+        }
+        .container {
+            max-width: 600px;
+            margin: auto;
+            background: #333;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0px 0px 10px rgba(255, 255, 255, 0.2);
+        }
+        input, button {
+            width: 100%;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 5px;
+            border: none;
+        }
+        button {
+            font-size: 16px;
+            cursor: pointer;
+        }
+        .simulate-btn {
+            background: #ff4757;
+            color: white;
+        }
+        .reset-btn {
+            background: #444;
+            color: white;
+        }
+        canvas {
+            margin-top: 20px;
+            background: #222;
+            border-radius: 10px;
+            padding: 10px;
+        }
+        .results {
+            margin-top: 20px;
+            text-align: left;
+            background: #444;
+            padding: 15px;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2>Ranked Tilt Simulator</h2>
+        <p>Enter your rank details and simulate ranked games.</p>
+        
+        <label>Current Rank (e.g., Silver 4, Gold 3)</label>
+        <input type="text" id="currentRank" placeholder="Enter your rank">
+
+        <label>Last Season's Rank (e.g., Bronze 2, Platinum 1)</label>
+        <input type="text" id="lastSeasonRank" placeholder="Enter last season rank">
+
+        <label>Win Rate (%)</label>
+        <input type="number" id="winRate" placeholder="Enter win rate (e.g., 55)">
+
+        <label>Number of Games to Simulate</label>
+        <input type="number" id="numGames" placeholder="Enter number of games">
+
+        <button class="simulate-btn" onclick="simulateGames()">Simulate Games</button>
+        <button class="reset-btn" onclick="resetSimulator()">Reset</button>
+    </div>
+
+    <div class="results" id="resultsContainer"></div>
+
+    <canvas id="gameResultsChart"></canvas>
+    <canvas id="tiltChart"></canvas>
+
+    <script>
+        const rankMMR = {
+            "Iron 4": 800, "Iron 3": 850, "Iron 2": 900, "Iron 1": 950,
+            "Bronze 4": 1000, "Bronze 3": 1050, "Bronze 2": 1100, "Bronze 1": 1150,
+            "Silver 4": 1200, "Silver 3": 1250, "Silver 2": 1300, "Silver 1": 1350,
+            "Gold 4": 1400, "Gold 3": 1450, "Gold 2": 1500, "Gold 1": 1550,
+            "Platinum 4": 1600, "Platinum 3": 1650, "Platinum 2": 1700, "Platinum 1": 1750,
+            "Diamond 4": 1800, "Diamond 3": 1850, "Diamond 2": 1900, "Diamond 1": 1950
+        };
+
+        function estimateMMR(rank, lastSeasonRank, winRate) {
+            let baseMMR = rankMMR[rank] || 1500;
+            let lastSeasonMMR = rankMMR[lastSeasonRank] || 1500;
+            let mmrAdjustment = (winRate - 50) * 10;
+            return Math.floor((baseMMR + lastSeasonMMR) / 2 + mmrAdjustment);
+        }
+
+        function simulateGames() {
+            let currentRank = document.getElementById("currentRank").value;
+            let lastSeasonRank = document.getElementById("lastSeasonRank").value;
+            let winRate = parseFloat(document.getElementById("winRate").value);
+            let numGames = parseInt(document.getElementById("numGames").value);
+
+            if (!currentRank || !lastSeasonRank || isNaN(winRate) || isNaN(numGames)) {
+                alert("Please fill in all fields correctly!");
+                return;
+            }
+
+            let mmr = estimateMMR(currentRank, lastSeasonRank, winRate);
+            let lp = 50;
+            let tilt = 0;
+            let streak = 0;
+            let gameResults = [];
+            let tiltLevels = [];
+
+            for (let i = 0; i < numGames; i++) {
+                let difficulty = mmr + (streak * 20);
+                let winChance = Math.max(10, Math.min(90, 50 + (mmr - difficulty) / 2));
+                let won = Math.random() * 100 <= winChance;
+
+                let lpGain = won ? Math.floor(Math.random() * 7) + 15 : Math.floor(Math.random() * 7) + 18;
+                let lpLoss = won ? Math.floor(Math.random() * 7) + 12 : Math.floor(Math.random() * 7) + 18;
+
+                if (won) {
+                    lp += lpGain;
+                    mmr += Math.floor(Math.random() * 6) + 5;
+                    streak++;
+                } else {
+                    lp -= lpLoss;
+                    mmr -= Math.floor(Math.random() * 6) + 5;
+                    streak--;
+                }
+
+                if (!won) {
+                    tilt += (lpLoss - 15) + Math.abs(streak * 2);
+                } else {
+                    tilt = Math.max(0, tilt - 5);
+                }
+
+                gameResults.push(won ? 1 : 0);
+                tiltLevels.push(tilt);
+            }
+
+            let resultsText = `
+                <h3>Simulation Complete</h3>
+                <p><strong>Final LP:</strong> ${lp}</p>
+                <p><strong>Final MMR:</strong> ${mmr}</p>
+                <p><strong>Final Tilt Level:</strong> ${tilt}</p>
+                <h3>Tilt Level Explanation</h3>
+                <p><strong>0-10:</strong> Calm - Playing normally.</p>
+                <p><strong>10-30:</strong> Annoyed - Minor frustration.</p>
+                <p><strong>30-60:</strong> Tilted - Likely making mistakes.</p>
+                <p><strong>60+:</strong> Highly Tilted - Rage queuing, emotional play.</p>
+            `;
+
+            document.getElementById("resultsContainer").innerHTML = resultsText;
+            drawChart(gameResults, "gameResultsChart", "Win/Loss Pattern", "Game Number", ["Loss", "Win"]);
+            drawChart(tiltLevels, "tiltChart", "Tilt Level Over Time", "Game Number", ["Low Tilt", "High Tilt"]);
+        }
+
+        function resetSimulator() {
+            document.getElementById("currentRank").value = "";
+            document.getElementById("lastSeasonRank").value = "";
+            document.getElementById("winRate").value = "";
+            document.getElementById("numGames").value = "";
+            document.getElementById("resultsContainer").innerHTML = "";
+        }
+    </script>
+
+</body>
+</html>
